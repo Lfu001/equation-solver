@@ -9,6 +9,9 @@ class EquationSolver:
         n_sample=1e5,
         random_state=None,
     ) -> None:
+        """
+        If possible, set `interval` to `(a, b)` satisfying f(a)f(b) < 0.
+        """
         self.__interval_max, self.__interval_min = sorted(interval)
         self.__precision = precision
         if n_sample <= 0:
@@ -49,7 +52,6 @@ class EquationSolver:
         left = self.__interval_min
         right = self.__interval_max
         while (right - left) >= self.__precision:
-            # print("[{}, {}] precision: {}".format(left, right, (right - left)))
             mid = left + (right - left) / 2
             if np.sign(self.__func(mid)) == np.sign(self.__func(left)):
                 left = mid
