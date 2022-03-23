@@ -1,31 +1,66 @@
+import numbers
+
 import numpy as np
 
 
 class EquationSolver:
     def __init__(
         self,
-        interval=(-(2**31), (2**31 - 1)),
+        solver="bisect",
+        max_iter=10000,
+        interval=(-10000, 10000),
         precision=1e-10,
-        n_sample=1e5,
+        n_sample=100000,
         random_state=None,
     ) -> None:
         """
         If possible, set `interval` to `(a, b)` satisfying f(a)f(b) < 0.
         """
+        all_solvers = {"bisect", "secant"}
+        if solver not in all_solvers:
+            raise ValueError("Equation Solver supports only solvers in {}, got {}.".format(all_solvers, solver))
+        self.__solver = solver
+
+        if solver == "secant" and not isinstance(max_iter, int) or max_iter <= 0:
+            raise ValueError("max_iter parameter expects integer greater than 0, got {}.".format(max_iter))
+        self.__max_iter = max_iter
+
+        try:
+            iter(interval)
+            if not all(map(isinstance, interval, [numbers.Number, numbers.Number])):
+                raise ValueError(
+                    "interval parameter expects Iterable[Number, Number], got {}{}".format(
+                        type(interval),
+                        list(map(type, interval))
+                    )
+                )
+        except TypeError:
+            raise ValueError(
+                "interval parameter expects Iterable[Number, Number], got {}".format(
+                    type(interval)
+                )
+            )
         self.__interval_max, self.__interval_min = sorted(interval)
+
+        if solver == "bisect" and not isinstance(precision, numbers.Number) or precision <= 0:
+            raise ValueError("precision parameter expects unsigned number, got {}.".format(precision))
         self.__precision = precision
-        if n_sample <= 0:
-            raise ValueError("`n_sample` must be greater than 0.")
+
+        if not isinstance(n_sample, numbers.Integral) or n_sample <= 0:
+            raise ValueError("n_sample parameter expects integer greater than 0, got {}.".format(n_sample))
         self.__n_sample = n_sample
+
         if random_state is not None:
+            if not isinstance(random_state, int) or random_state < 0 or (2**32 - 1) < random_state:
+                raise ValueError("random_state parameter expects integer between 0 and 2**32 - 1, got {}.".format(random_state))
             np.random.seed(random_state)
 
     def solve(self, func):
         """
-        Solves the equation `f(x) = 0` where f is the given function in the paramater `func`.
+        Solves the equation `f(x) = 0` where f is the given function in the parameter `func`.
         If the function is guaranteed to be continuous and RuntimeError is raised, try narrowing the `interval`.
 
-        Paramater
+        Parameter
         ---
         `func`: Equation to solve. Functions must be continuous.
 
@@ -35,7 +70,10 @@ class EquationSolver:
         """
         self.__func = np.vectorize(func)
         self.__setInterval()
-        return self.__binary_search()
+        if self.__solver == "bisect":
+            return self.__binary_search()
+        elif self.__solver == "secant":
+            return self.__secant()
 
     def __setInterval(self) -> None:
         interval = [self.__interval_min, self.__interval_max]
@@ -58,3 +96,11 @@ class EquationSolver:
             else:
                 right = mid
         return left + (right - left) / 2
+
+    def __secant(self):
+        previous, current = self.__interval_min, self.__interval_max
+        for _ in range(self.__max_iter):
+            if previous == current:
+                break
+            previous, current = current, current - self.__func(current) * (current - previous) / (self.__func(current) - self.__func(previous))
+        return current
